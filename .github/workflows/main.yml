@@ -1,0 +1,28 @@
+name: Run Python Script Every 13 Minutes
+
+on:
+  schedule:
+    # Runs every 13 minutes
+    - cron: '*/13 * * * *'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  run-python-script:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'  # Adjust version if needed
+
+    - name: Install dependencies (if any)
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt  # If you have dependencies
+
+    - name: Run Python script
+      run: python script.py  # Replace with your script name
