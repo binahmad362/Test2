@@ -3,11 +3,11 @@ import subprocess
 
 # GitHub repository details
 REPO_URL = "https://github.com/binahmad362/Test2.git"  # Replace with your repository URL
-BRANCH = "main"  # Ensure this matches the branch in your GitHub repository
+BRANCH = "main"  # Ensure this matches your GitHub repository branch
 FILE_NAME = "test.txt"
 CONTENT = "hello"
 
-# Hardcoded GitHub Personal Access Token (PAT) (⚠ Security Risk)
+# Hardcoded GitHub Personal Access Token (PAT) ⚠ Security Risk
 GITHUB_PAT = "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"
 
 # Git user details
@@ -35,22 +35,22 @@ def write_file():
 def push_to_github():
     print("Initializing Git repository and pushing changes...")
     try:
-        # Initialize a new Git repository
+        # Initialize Git repository
         subprocess.run(["git", "init"], check=True)
 
         # Set Git user details
         subprocess.run(["git", "config", "user.name", GIT_USER_NAME], check=True)
         subprocess.run(["git", "config", "user.email", GIT_USER_EMAIL], check=True)
 
-        # Ensure correct branch is set
+        # Ensure correct branch is created/switched
         subprocess.run(["git", "checkout", "-b", BRANCH], check=True)
 
         # Add and commit files
         subprocess.run(["git", "add", FILE_NAME], check=True)
         subprocess.run(["git", "commit", "-m", f"Added {FILE_NAME} with content '{CONTENT}'"], check=True)
 
-        # Configure remote with token
-        repo_url_with_token = REPO_URL.replace("https://", f"https://{GITHUB_PAT}@")
+        # Configure remote with token for authentication
+        repo_url_with_token = f"https://{GITHUB_PAT}:x-oauth-basic@github.com/{GIT_USER_NAME}/Test2.git"
         subprocess.run(["git", "remote", "add", "origin", repo_url_with_token], check=True)
 
         # Push to GitHub
