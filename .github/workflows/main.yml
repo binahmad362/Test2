@@ -34,7 +34,7 @@ jobs:
         BYBIT_API_KEY: ${{ secrets.BYBIT_API_KEY }}
         BYBIT_API_SECRET: ${{ secrets.BYBIT_API_SECRET }}
       run: |
-        python -u trading_bot.py 2>&1 | tee logs/execution.log
+        python -u script.py 2>&1 | tee logs/execution.log
         echo "Exit code: $?" >> logs/status.txt
         
     - name: Upload Results
