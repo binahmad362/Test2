@@ -1,69 +1,185 @@
 import os
-import subprocess
+import sys
+import ccxt
+import pandas as pd
+import pytz
+from pybit.unified_trading import HTTP
+import time
+from datetime import datetime
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-# GitHub repository details
-REPO_URL = "https://github.com/binahmad362/Test2.git"  # Replace with your repository URL
-BRANCH = "main"  # Ensure this matches your GitHub repository branch
-FILE_NAME = "test.txt"
-CONTENT = "hello"
+# ===== Configuration =====
+SYMBOLS = [
+    'XRP/USDT:USDT',
+    'BTC/USDT:USDT',
+    'ETH/USDT:USDT',
+    'SOL/USDT:USDT',
+    'ADA/USDT:USDT'
+]
+TRADE_AMOUNT_USDT = 50
+STOPLOSS_PERCENT = 2
+TAKEPROFIT_PERCENT = 7.5
 
-# Hardcoded GitHub Personal Access Token (PAT) ⚠ Security Risk
-GITHUB_PAT = "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"
+# Email Configuration
+SENDER_EMAIL = "dahmadu071@gmail.com"
+RECIPIENT_EMAILS = ["teejeedeeone@gmail.com"]
+EMAIL_PASSWORD = "oase wivf hvqn lyhr"
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
 
-# Git user details
-GIT_USER_NAME = "binahmad362"  # Replace with your GitHub username
-GIT_USER_EMAIL = "tajuttech360@gmail.com"  # Replace with your GitHub email
+# Strategy Parameters
+EMA_FAST = 38
+EMA_SLOW = 62
+EMA_TREND = 200
+TIMEFRAME = '15m'
 
-# Ensure repository directory exists
-REPO_DIR = "Git"
-if not os.path.exists(REPO_DIR):
-    os.mkdir(REPO_DIR)
-os.chdir(REPO_DIR)
+# GitHub Actions State File
+STATE_FILE = "trade_state.txt"
 
-# Function to write the file
-def write_file():
-    print(f"Creating file '{FILE_NAME}'...")
+# ===== State Management =====
+def check_trade_state():
+    """Check if we've already made a trade in this run"""
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, 'r') as f:
+            return f.read().strip() == "TRADED"
+    return False
+
+def set_trade_state():
+    """Mark that we've made a trade"""
+    with open(STATE_FILE, 'w') as f:
+        f.write("TRADED")
+
+# ===== Initialize Connections =====
+bybit = HTTP(
+    api_key=os.getenv("BYBIT_API_KEY", "lJu52hbBTbPkg2VXZ2"),
+    api_secret=os.getenv("BYBIT_API_SECRET", "e43RV6YDZsn24Q9mucr0i4xbU7YytdL2HtuV"),
+    demo=True  # Use demo=True for testing, False for live
+)
+
+bitget = ccxt.bitget({
+    'enableRateLimit': True
+})
+
+# ===== Email Functions =====
+def send_email_notification(subject, body):
+    """Send email notification about trade execution"""
     try:
-        with open(FILE_NAME, "w") as file:
-            file.write(CONTENT)
-        print(f"File '{FILE_NAME}' created with content: '{CONTENT}'")
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = ", ".join(RECIPIENT_EMAILS)
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SENDER_EMAIL, EMAIL_PASSWORD)
+            server.sendmail(SENDER_EMAIL, RECIPIENT_EMAILS, msg.as_string())
+        
+        print("Email notification sent successfully")
     except Exception as e:
-        print(f"Error writing file: {e}")
-        exit(1)
+        print(f"Failed to send email: {str(e)}")
 
-# Function to initialize Git and push changes
-def push_to_github():
-    print("Initializing Git repository and pushing changes...")
-    try:
-        # Initialize Git repository
-        subprocess.run(["git", "init"], check=True)
+# ===== Trading Functions =====
+def place_trade_order(symbol, signal, price):
+    """Place the trade order with stop-loss and take-profit"""
+    if check_trade_state():
+        print("Already executed a trade in this run. Exiting.")
+        sys.exit(0)
+    
+    bybit_symbol = symbol.replace('/USDT:USDT', 'USDT')
+    lot_size_info = get_lot_size_info(symbol)
+    
+    # Calculate position size
+    raw_qty = TRADE_AMOUNT_USDT / price
+    quantity = adjust_quantity(raw_qty, lot_size_info)
+    
+    # Calculate SL and TP prices
+    if signal == "buy":
+        sl_price = round(price * (1 - STOPLOSS_PERCENT/100), 4)
+        tp_price = round(price * (1 + TAKEPROFIT_PERCENT/100), 4)
+        side = "Buy"
+    else:  # sell/short
+        sl_price = round(price * (1 + STOPLOSS_PERCENT/100), 4)
+        tp_price = round(price * (1 - TAKEPROFIT_PERCENT/100), 4)
+        side = "Sell"
+    
+    # Place the order
+    order = bybit.place_order(
+        category="linear",
+        symbol=bybit_symbol,
+        side=side,
+        orderType="Market",
+        qty=str(quantity),
+        takeProfit=str(tp_price),
+        stopLoss=str(sl_price),
+        timeInForce="GTC"
+    )
+    
+    if order['retCode'] == 0:
+        set_trade_state()  # Mark that we've made a trade
+        trade_details = (
+            f"Symbol: {symbol}\n"
+            f"Direction: {signal.upper()}\n"
+            f"Quantity: {quantity} {bybit_symbol.replace('USDT', '')}\n"
+            f"Entry Price: {price}\n"
+            f"Stop-Loss: {sl_price} ({STOPLOSS_PERCENT}%)\n"
+            f"Take-Profit: {tp_price} ({TAKEPROFIT_PERCENT}%)\n"
+            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        print(f"\nOrder executed successfully for {symbol}:")
+        print(trade_details)
+        
+        # Send email notification
+        email_subject = f"Trade Executed: {signal.upper()} {symbol}"
+        send_email_notification(email_subject, trade_details)
+        
+        # Exit after first successful trade
+        sys.exit(0)
+    else:
+        error_msg = f"Order failed for {symbol}: {order['retMsg']}"
+        print(error_msg)
+        send_email_notification(f"Trade Failed: {symbol}", error_msg)
 
-        # Set Git user details
-        subprocess.run(["git", "config", "user.name", GIT_USER_NAME], check=True)
-        subprocess.run(["git", "config", "user.email", GIT_USER_EMAIL], check=True)
-
-        # Ensure correct branch is created/switched
-        subprocess.run(["git", "checkout", "-b", BRANCH], check=True)
-
-        # Add and commit files
-        subprocess.run(["git", "add", FILE_NAME], check=True)
-        subprocess.run(["git", "commit", "-m", f"Added {FILE_NAME} with content '{CONTENT}'"], check=True)
-
-        # Configure remote with token for authentication
-        repo_url_with_token = f"https://{GITHUB_PAT}:x-oauth-basic@github.com/{GIT_USER_NAME}/Test2.git"
-        subprocess.run(["git", "remote", "add", "origin", repo_url_with_token], check=True)
-
-        # Push to GitHub
-        subprocess.run(["git", "push", "-u", "origin", BRANCH], check=True)
-        print("Changes pushed successfully.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error pushing changes: {e}")
-        exit(1)
-
-# Main function
-def main():
-    write_file()
-    push_to_github()
-
+# ===== Main Execution =====
 if __name__ == "__main__":
-    main()
+    # Check if we've already traded in this run
+    if check_trade_state():
+        print("Already executed a trade in this workflow run. Exiting.")
+        sys.exit(0)
+    
+    print(f"Running multi-symbol strategy on {TIMEFRAME} timeframe")
+    print(f"Trade amount: {TRADE_AMOUNT_USDT} USDT per symbol")
+    print(f"Stop-loss: {STOPLOSS_PERCENT}%, Take-profit: {TAKEPROFIT_PERCENT}%")
+    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("="*50)
+    
+    try:
+        for symbol in SYMBOLS:
+            try:
+                print(f"\nChecking {symbol}...")
+                signal = check_for_pullback_signal(symbol)
+                if signal:
+                    current_price = get_current_price(symbol)
+                    print(f"Signal detected on last closed candle: {signal.upper()}")
+                    place_trade_order(symbol, signal, current_price)
+                else:
+                    print(f"No valid pullback signal for {symbol}")
+            except Exception as e:
+                print(f"Error processing {symbol}: {str(e)}")
+                send_email_notification(
+                    f"Error processing {symbol}",
+                    f"Error occurred while processing {symbol}:\n{str(e)}"
+                )
+                continue
+            
+            time.sleep(1)  # Rate limiting
+            
+    except Exception as e:
+        error_msg = f"Fatal error in main execution: {str(e)}"
+        print(error_msg)
+        send_email_notification("Trading Bot Crashed", error_msg)
+        sys.exit(1)
