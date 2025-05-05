@@ -3,7 +3,7 @@ name: Crypto Trading Bot
 on:
   schedule:
     - cron: '*/15 * * * *'  # Runs every 15 minutes
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:        # Allow manual triggers
 
 jobs:
   execute-trades:
@@ -13,12 +13,13 @@ jobs:
       
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # Updated to v4
       
     - name: Set up Python ${{ env.PYTHON_VERSION }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5  # Updated to v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'  # Added caching for faster installs
         
     - name: Install dependencies
       run: |
@@ -33,9 +34,10 @@ jobs:
       
     - name: Upload logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       with:
-        name: trading-logs
+        name: trading-logs-${{ github.run_id }}
         path: |
           *.log
           trade_state.txt
+        retention-days: 3  # Automatically clean up old logs
