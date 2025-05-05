@@ -206,7 +206,7 @@ def check_for_pullback_signal(symbol):
             df_15m.at[df_15m.index[i], 'First_Down_Arrow'] = True
             last_signal = 0
     
-    last_candle = df_15m.iloc[-2]
+    last_candle = df_15m.iloc[-116]
     
     if last_candle['First_Up_Arrow']:
         return "buy"
