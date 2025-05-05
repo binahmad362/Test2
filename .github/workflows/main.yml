@@ -30,7 +30,7 @@ jobs:
       env:
         BYBIT_API_KEY: ${{ secrets.BYBIT_API_KEY }}
         BYBIT_API_SECRET: ${{ secrets.BYBIT_API_SECRET }}
-      run: python trading_bot.py
+      run: python script.py
       
     - name: Upload logs
       if: always()
