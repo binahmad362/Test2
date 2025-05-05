@@ -1,35 +1,41 @@
-name: Trading Bot
+name: Crypto Trading Bot
 
 on:
   schedule:
     - cron: '*/15 * * * *'  # Runs every 15 minutes
+  workflow_dispatch:  # Allow manual triggers
 
 jobs:
-  trade:
+  execute-trades:
     runs-on: ubuntu-latest
-    
+    env:
+      PYTHON_VERSION: '3.9'
+      
     steps:
-    - uses: actions/checkout@v2
-    
-    - name: Set up Python
-      uses: actions/setup-python@v2
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-    
+        python-version: ${{ env.PYTHON_VERSION }}
+        
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install ccxt pandas pybit
-    
+        
     - name: Run trading bot
       env:
         BYBIT_API_KEY: ${{ secrets.BYBIT_API_KEY }}
         BYBIT_API_SECRET: ${{ secrets.BYBIT_API_SECRET }}
       run: python trading_bot.py
-    
-    - name: Upload trade state
-      uses: actions/upload-artifact@v2
+      
+    - name: Upload logs
       if: always()
+      uses: actions/upload-artifact@v3
       with:
-        name: trade-state
-        path: trade_state.txt
+        name: trading-logs
+        path: |
+          *.log
+          trade_state.txt
