@@ -13,31 +13,34 @@ jobs:
       
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4  # Updated to v4
+      uses: actions/checkout@v4
       
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
-      uses: actions/setup-python@v5  # Updated to v5
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'  # Added caching for faster installs
+        cache: 'pip'
         
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install ccxt pandas pybit
         
-    - name: Run trading bot
+    - name: Create log directory
+      run: mkdir -p logs
+        
+    - name: Execute Trading Bot
       env:
         BYBIT_API_KEY: ${{ secrets.BYBIT_API_KEY }}
         BYBIT_API_SECRET: ${{ secrets.BYBIT_API_SECRET }}
-      run: python script.py
-      
-    - name: Upload logs
+      run: |
+        python -u trading_bot.py 2>&1 | tee logs/execution.log
+        echo "Exit code: $?" >> logs/status.txt
+        
+    - name: Upload Results
+      uses: actions/upload-artifact@v4
       if: always()
-      uses: actions/upload-artifact@v4  # Updated to v4
       with:
-        name: trading-logs-${{ github.run_id }}
-        path: |
-          *.log
-          trade_state.txt
-        retention-days: 3  # Automatically clean up old logs
+        name: trading-results-${{ github.run_number }}
+        path: logs/
+        retention-days: 7
